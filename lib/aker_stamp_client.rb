@@ -9,6 +9,10 @@ module StampClient
   end
 
   class Stamp < Base
+
+    def owner_id
+      attributes['owner-id']
+    end
   end
 
   class Permission < Base
