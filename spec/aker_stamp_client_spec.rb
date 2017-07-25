@@ -63,6 +63,20 @@ RSpec.describe StampClient do
       end
     end
 
+    describe StampClient::Permission do
+      describe '#check_catch' do
+        before do
+          @id = "123"
+          @name = "stamp1"
+          @owner_id = "1"
+
+          stub_stamp(@id, @name, @owner_id)
+
+          stub_stamp_material()
+        end
+      end
+    end
+
   end
 
   private
