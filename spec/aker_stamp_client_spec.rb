@@ -17,6 +17,30 @@ RSpec.describe StampClient do
 
   describe StampClient::Stamp do
 
+    describe "#create" do
+      before do
+        @name = 'stamp1'
+        @owner_id = 1
+
+        stub_request(:post, url+"stamps").
+          with(
+            body: { data: { type: "stamps", attributes: { name: "stamp4", "owner-id": 1}}}.to_json,
+            headers: request_headers
+            )
+          .to_return(status: 200, body: "", headers: response_headers)
+
+        @new_stamp = StampClient::Stamp.create({name: 'stamp4', 'owner-id': 1})
+      end
+
+      it "has a name" do
+        expect(@new_stamp.name).to eq 'stamp4'
+      end
+
+      it "has a owner_id" do
+        expect(@new_stamp.owner_id).to eq 1
+      end
+    end
+
     describe '#find' do
       before do
         @id = "123"
@@ -63,16 +87,57 @@ RSpec.describe StampClient do
       end
     end
 
+    describe '#patch' do
+      before do
+        id = "123"
+        name = "stamp1"
+        owner_id = "1"
+
+        stub_stamp(id, name, owner_id)
+
+        rs = StampClient::Stamp.find(id)
+        @stamp = rs&.first
+
+        stub_request(:patch, stamp_urlid(id)).
+          with(
+            body: { data: { id: '123', type: "stamps", attributes: { name: "newname"}}}.to_json,
+            headers: request_headers
+            )
+          .to_return(status: 200, body: "", headers: response_headers)
+      end
+
+      it "can be updated" do
+        @stamp.update(name: 'newname')
+        expect(@stamp.name).to eq 'newname'
+      end
+    end
+
     describe StampClient::Permission do
       describe '#check_catch' do
-        before do
-          @id = "123"
-          @name = "stamp1"
-          @owner_id = "1"
 
-          stub_stamp(@id, @name, @owner_id)
+        it 'returns true when check_catch returns no unpermitted material_uuids' do
+          permission_type = 'spend'
+          names = ['dirk@here.com']
+          material_uuids = ['123']
 
-          stub_stamp_material()
+          stub_permission_check_200(permission_type, names, material_uuids)
+
+          data = make_permission_check_data(permission_type, names, material_uuids)
+          rs = StampClient::Permission.check_catch(data)
+          expect(rs).to eq true
+        end
+
+        it 'returns false when check_catch returns a list of unpermitted material_uuids' do
+          permission_type = 'spend'
+          names = ['bad@here.com']
+          material_uuids = ['123']
+
+          stub_permission_check_403(permission_type, names, material_uuids)
+
+          data = make_permission_check_data(permission_type, names, material_uuids)
+          rs = StampClient::Permission.check_catch(data)
+          expect(rs).to eq false
+          expect(StampClient::Permission.unpermitted_uuids).to eq material_uuids
         end
       end
     end
@@ -119,6 +184,40 @@ RSpec.describe StampClient do
           }
         }
       }
+  end
+
+  def stub_permission_check_200(permission_type, names, material_uuids)
+    data = make_permission_check_data(permission_type, names, material_uuids)
+
+    stub_request(:post, url+"permissions/check").
+        with(
+            body: data.to_json,
+            headers: request_headers
+            )
+        .to_return(status: 200, body: '', headers: response_headers)
+  end
+
+  def stub_permission_check_403(permission_type, names, material_uuids)
+    data = make_permission_check_data(permission_type, names, material_uuids)
+
+    response_body = {errors:[{status:"403",title:"Permission failed",detail:"The specified permission was not present for some materials.",material_uuids: material_uuids }]}
+
+    stub_request(:post, url+"permissions/check").
+        with(
+            body: data.to_json,
+            headers: request_headers
+            )
+        .to_return(status: 403, body: response_body.to_json, headers: response_headers)
+  end
+
+  def make_permission_check_data(permission_type, names, material_uuids)
+    {
+      data: {
+        permission_type: permission_type,
+        names: names,
+        material_uuids: material_uuids
+      }
+    }
   end
 
 end
