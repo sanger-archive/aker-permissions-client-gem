@@ -409,5 +409,39 @@ RSpec.describe StampClient do
     }
   end
 
+  def stub_permission_check_200(permission_type, names, material_uuids)
+    data = make_permission_check_data(permission_type, names, material_uuids)
+
+    stub_request(:post, url+"permissions/check").
+        with(
+            body: data.to_json,
+            headers: request_headers
+            )
+        .to_return(status: 200, body: '', headers: response_headers)
+  end
+
+  def stub_permission_check_403(permission_type, names, material_uuids)
+    data = make_permission_check_data(permission_type, names, material_uuids)
+
+    response_body = {errors:[{status:"403",title:"Permission failed",detail:"The specified permission was not present for some materials.",material_uuids: material_uuids }]}
+
+    stub_request(:post, url+"permissions/check").
+        with(
+            body: data.to_json,
+            headers: request_headers
+            )
+        .to_return(status: 403, body: response_body.to_json, headers: response_headers)
+  end
+
+  def make_permission_check_data(permission_type, names, material_uuids)
+    {
+      data: {
+        permission_type: permission_type,
+        names: names,
+        material_uuids: material_uuids
+      }
+    }
+  end
+
 end
 
