@@ -16,6 +16,10 @@ module StampClient
       self.update_attributes(attrs)
     end
 
+    def self.find_with_permissions(stamp_id)
+      includes(:permissions).find(stamp_id)
+    end
+
   end
 
   class Permission < Base
