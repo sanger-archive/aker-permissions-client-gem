@@ -24,10 +24,33 @@ module StampClient
       includes(:permissions).find(stamp_id)
     end
 
+    def self.find_with_materials(stamp_id)
+      includes(:materials).find(stamp_id)
+    end
+
+    def set_permission_to(permissions)
+      set_permissions(data: permissions).first
+    end
+
+    def apply_to(materials)
+      apply(data: { materials: materials }).first
+    end
+
+    def unapply_to(materials)
+      unapply(data: { materials: materials }).first
+    end
   end
 
   class Permission < Base
     custom_endpoint :check, on: :collection, request_method: :post
+
+    def permission_type
+      attributes['permission-type'].to_sym
+    end
+
+    def accessible_id
+      attributes['accessible-id']
+    end
 
     class << self
       attr_accessor :unpermitted_uuids
@@ -45,6 +68,12 @@ module StampClient
   end
 
   class Material < Base
+    def material_uuid
+      attributes['material-uuid']
+    end
+    def stamp_id
+      attributes['stamp-id']
+    end
   end
 
 end
