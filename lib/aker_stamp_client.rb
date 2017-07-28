@@ -8,6 +8,8 @@ module StampClient
   end
 
   class Stamp < Base
+    custom_endpoint :set_permissions, on: :member, request_method: :post
+
     def owner_id
       attributes['owner-id']
     end

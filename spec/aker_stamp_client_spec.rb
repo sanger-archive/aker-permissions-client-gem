@@ -106,6 +106,58 @@ RSpec.describe StampClient do
       end
     end
 
+    describe '#set_permissions' do
+      before do
+        @stamp_id = "123"
+        @name = "stamp1"
+        @owner_id = "dirk@here.com"
+
+        @permission_id = "1"
+        @permission_type = :spend
+        @permitted = 'zogh'
+
+        stub_stamp(@stamp_id, @name, @owner_id)
+      end
+
+      context 'when the user is the owner of the stamp' do
+        it 'sets the permissions on the stamp' do
+          stamp = StampClient::Stamp.find(@stamp_id).first
+          data = { data: [{ 'permission-type': @permission_type , permitted: @permitted}] }
+
+          response_body = make_stamp_with_permission_data(@stamp_id, @name, @owner_id, @permission_id, @permitted, @permission_type)
+
+          stub_request(:post, stamp_urlid(@stamp_id)+"/set_permissions")
+            .with(body: data.to_json,
+              headers: request_headers )
+            .to_return(:status => 200, :body => response_body.to_json, :headers => response_headers)
+
+          permissions = stamp.set_permissions(data).first.permissions
+          expect(permissions).not_to be_nil
+          expect(permissions.length).to eq 1
+          permission = permissions&.first
+          expect(permission.id).to eq "1"
+          expect(permission["permission-type"]).to eq @permission_type.to_s
+          expect(permission["permitted"]).to eq @permitted
+          expect(permission["accessible-id"]).to eq @stamp_id
+        end
+      end
+
+      context 'when the user is not the owner of the stamp' do
+        it 'returns a 403' do
+          stamp = StampClient::Stamp.find(@stamp_id).first
+          data = { data: [{ 'permission-type': @permission_type , permitted: @permitted}] }
+
+          stub_request(:post, stamp_urlid(@stamp_id)+"/set_permissions")
+            .with(body: data.to_json,
+              headers: request_headers )
+            .to_return(:status => 403, :body => "", :headers => response_headers)
+
+          expect{stamp.set_permissions(data)}.to raise_error JsonApiClient::Errors::AccessDenied
+        end
+      end
+
+    end
+
     describe '#all' do
       before do
         @data = [
