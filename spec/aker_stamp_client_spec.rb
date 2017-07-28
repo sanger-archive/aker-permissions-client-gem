@@ -61,6 +61,49 @@ RSpec.describe StampClient do
       end
     end
 
+    describe '#all' do
+      before do
+        @data = [
+          make_stamp_data(1, "stamp1", 1),
+          make_stamp_data(2, "stamp2", 1),
+        ]
+        stub_request(:get, url+'stamps')
+          .to_return(status: 200, body: { data: @data }.to_json, headers: response_headers)
+      end
+
+      it 'returns all stamps' do
+        rs = StampClient::Stamp.all
+        expect(rs.length).to eq(@data.length)
+        @data.zip(rs).each do |d, stamp|
+          expect(stamp.id).to eq(d[:id])
+          expect(stamp.name).to eq(d[:attributes][:name])
+          expect(stamp.owner_id).to eq(d[:attributes][:'owner-id'])
+        end
+      end
+    end
+
+    describe '#patch' do
+      before do
+        id = "123"
+        name = "stamp1"
+        owner_id = "1"
+
+        stub_stamp(id, name, owner_id)
+
+        rs = StampClient::Stamp.find(id)
+        @stamp = rs&.first
+
+        stub_request(:patch, stamp_urlid(id))
+          .with( body: { data: { id: '123', type: "stamps", attributes: { name: "newname"}}}.to_json, headers: request_headers)
+          .to_return(status: 200, body: "", headers: response_headers)
+      end
+
+      it "can be updated" do
+        @stamp.update(name: 'newname')
+        expect(@stamp.name).to eq 'newname'
+      end
+    end
+
     describe '#find_with_permissions' do
       before do
         @stamp_id = "123"
@@ -155,50 +198,105 @@ RSpec.describe StampClient do
           expect{stamp.set_permissions(data)}.to raise_error JsonApiClient::Errors::AccessDenied
         end
       end
-
     end
 
-    describe '#all' do
+    describe '#apply' do
       before do
-        @data = [
-          make_stamp_data(1, "stamp1", 1),
-          make_stamp_data(2, "stamp2", 1),
-        ]
-        stub_request(:get, url+'stamps')
-          .to_return(status: 200, body: { data: @data }.to_json, headers: response_headers)
+        @stamp_id = "123"
+        @name = "stamp1"
+        @owner_id = "guest"
+
+        stub_stamp(@stamp_id, @name, @owner_id)
       end
 
-      it 'returns all stamps' do
-        rs = StampClient::Stamp.all
-        expect(rs.length).to eq(@data.length)
-        @data.zip(rs).each do |d, stamp|
-          expect(stamp.id).to eq(d[:id])
-          expect(stamp.name).to eq(d[:attributes][:name])
-          expect(stamp.owner_id).to eq(d[:attributes][:'owner-id'])
+      context 'when the user is the owner of the material to be stamped' do
+        it 'stamps the material' do
+          material_id = 1
+          material_uuid = SecureRandom.uuid
+          stamp = StampClient::Stamp.find(@stamp_id).first
+          data = { data: { materials: [material_uuid]}}
+          response_body = make_stamp_with_material_data(@stamp_id, @name, @owner_id, material_id, material_uuid)
+
+          stub_request(:post, stamp_urlid(@stamp_id)+"/apply")
+            .with(body: data.to_json,
+                 headers: request_headers)
+            .to_return(status: 200, body: response_body.to_json, headers: response_headers)
+
+          rs = stamp.apply(data)
+          stamp = rs.first
+          expect(stamp).not_to be be_nil
+          expect(stamp.materials.first["stamp-id"]).to eq @stamp_id
+        end
+      end
+
+      context 'when the user is not the owner of the material to be stamped' do
+        it 'does not stamp the material' do
+          material_uuid = SecureRandom.uuid
+          stamp = StampClient::Stamp.find(@stamp_id).first
+          data = { data: { materials: [material_uuid]}}
+
+          stub_request(:post, stamp_urlid(@stamp_id)+"/apply")
+            .with(body: data.to_json,
+                 headers: request_headers)
+            .to_return(status: 403, body: "", headers: response_headers)
+
+          expect{stamp.apply(data)}.to raise_error JsonApiClient::Errors::AccessDenied
         end
       end
     end
 
-    describe '#patch' do
+    describe '#unapply' do
       before do
-        id = "123"
-        name = "stamp1"
-        owner_id = "1"
+        @stamp_id = "123"
+        @name = "stamp1"
+        @owner_id = "guest"
+        @material_id = 1
+        @material_uuid = SecureRandom.uuid
 
-        stub_stamp(id, name, owner_id)
+        stamp_data = make_stamp_with_material_data(@stamp_id, @name, @owner_id, @material_id, @material_uuid)
 
-        rs = StampClient::Stamp.find(id)
-        @stamp = rs&.first
-
-        stub_request(:patch, stamp_urlid(id))
-          .with( body: { data: { id: '123', type: "stamps", attributes: { name: "newname"}}}.to_json, headers: request_headers)
-          .to_return(status: 200, body: "", headers: response_headers)
+        stub_request(:get, stamp_urlid(@stamp_id))
+         .with(headers: request_headers)
+         .to_return(status: 200, body: stamp_data.to_json, headers: response_headers)
       end
 
-      it "can be updated" do
-        @stamp.update(name: 'newname')
-        expect(@stamp.name).to eq 'newname'
+      context 'when the user is the owner of the material to be unstamped' do
+        it 'removes the stamp on the material' do
+          stamp = StampClient::Stamp.find(@stamp_id).first
+          material_uuid = stamp.materials.first["material-uuid"]
+          data = { data: { materials: [material_uuid]}}
+
+          expect(material_uuid).to eq @material_uuid
+
+          response_body = make_stamp_with_no_material_data(@stamp_id, @name, @owner_id)
+
+          stub_request(:post, stamp_urlid(@stamp_id)+"/unapply")
+            .with(body: data.to_json,
+                 headers: request_headers)
+            .to_return(status: 200, body: response_body.to_json, headers: response_headers)
+
+          rs = stamp.unapply(data)
+          stamp = rs.first
+          expect(stamp).not_to be be_nil
+          expect(stamp.materials).to eq []
+        end
       end
+
+      context 'when the user is not the owner of the material to be unstamped' do
+        it 'does not remove the stamp on the material' do
+          stamp = StampClient::Stamp.find(@stamp_id).first
+          material_uuid = stamp.materials.first["material-uuid"]
+          data = { data: { materials: [material_uuid]}}
+
+          stub_request(:post, stamp_urlid(@stamp_id)+"/unapply")
+            .with(body: data.to_json,
+                 headers: request_headers)
+            .to_return(status: 403, body: "", headers: response_headers)
+
+          expect{stamp.unapply(data)}.to raise_error JsonApiClient::Errors::AccessDenied
+        end
+      end
+
     end
   end
 
@@ -403,6 +501,62 @@ RSpec.describe StampClient do
     }
   end
 
+  def make_stamp_with_material_data(id, name, owner_id, material_id, material_uuid)
+    {
+      data:
+      {
+        id: id,
+        type: "stamps",
+        attributes:
+        {
+          name: name,
+          "owner-id": owner_id
+        },
+        relationships:
+        {
+          materials:
+          {
+            data: [{ type: "materials", id: material_id}]
+          }
+        }
+      },
+      included:
+      [
+        {
+          id: material_id,
+          type: "materials",
+          attributes:
+          {
+            "material-uuid": material_uuid,
+            "stamp-id": id
+          }
+        }
+      ]
+    }
+  end
+
+  def make_stamp_with_no_material_data(id, name, owner_id)
+    {
+      data:
+      {
+        id: id,
+        type: "stamps",
+        attributes:
+        {
+          name: name,
+          "owner-id": owner_id
+        },
+        relationships:
+        {
+          materials:
+          {
+            data: []
+          }
+        }
+      }
+    }
+  end
+
   def permission_urlid(id)
     url+'permissions/'+id
   end
@@ -413,24 +567,6 @@ RSpec.describe StampClient do
     stub_request(:get, permission_urlid(id))
          .with(headers: request_headers)
          .to_return(status: 200, body: { data: permission_data }.to_json, headers: response_headers)
-  end
-
-  def stub_permission_check_200(permission_type, names, material_uuids)
-    data = make_permission_check_data(permission_type, names, material_uuids)
-
-    stub_request(:post, url+"permissions/check")
-        .with( body: data.to_json, headers: request_headers)
-        .to_return(status: 200, body: '', headers: response_headers)
-  end
-
-  def stub_permission_check_403(permission_type, names, material_uuids)
-    data = make_permission_check_data(permission_type, names, material_uuids)
-
-    response_body = {errors:[{status:"403",title:"Permission failed",detail:"The specified permission was not present for some materials.",material_uuids: material_uuids }]}
-
-    stub_request(:post, url+"permissions/check")
-        .with(body: data.to_json, headers: request_headers)
-        .to_return(status: 403, body: response_body.to_json, headers: response_headers)
   end
 
   def make_permission_data(id, permission_type, permitted, accessible_id)
@@ -448,17 +584,6 @@ RSpec.describe StampClient do
       }
     }
 
-  end
-
-  def make_permission_check_data(permission_type, names, material_uuids)
-    {
-      data:
-      {
-        permission_type: permission_type,
-        names: names,
-        material_uuids: material_uuids
-      }
-    }
   end
 
   def stub_permission_check_200(permission_type, names, material_uuids)
