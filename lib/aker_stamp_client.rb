@@ -57,7 +57,7 @@ module StampClient
 
       def check_catch(args)
         begin
-          check(args)
+          check(data: args)
         rescue JsonApiClient::Errors::AccessDenied => e
           @unpermitted_uuids = e.env.body["errors"].first["material_uuids"]
           return false
