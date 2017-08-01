@@ -5,7 +5,7 @@ RSpec.describe StampClient do
 
   let(:content_type) { 'application/vnd.api+json' }
   let(:request_headers) { { 'Accept' => content_type, 'Content-Type'=> content_type } }
-  let(:response_headers) { { 'Content-Type'=> content_type } }
+  let(:response_headers) { { 'Content-Type' => content_type } }
   let(:url) { 'http://localhost:9999/api/v1/' }
 
   before do
@@ -20,27 +20,34 @@ RSpec.describe StampClient do
 
     describe "#create" do
       before do
+        @new_id = SecureRandom.uuid
+        @name = "stamp4"
+        @owner = "guest"
         stub_request(:post, url+"stamps")
-          .with( body: { data: { type: "stamps", attributes: { name: "stamp4", "owner-id": 1}}}.to_json, headers: request_headers )
-          .to_return(status: 200, body: "", headers: response_headers)
+          .with( body: { data: { type: "stamps", attributes: { name: "stamp4" }}}.to_json, headers: request_headers )
+          .to_return(status: 201, body: { data: make_stamp_data(@new_id, @name, @owner) }.to_json, headers: response_headers)
 
-        @new_stamp = StampClient::Stamp.create({name: 'stamp4', 'owner-id': 1})
+        @new_stamp = StampClient::Stamp.create({name: 'stamp4'})
+      end
+
+      it "has an id" do
+        expect(@new_stamp.id).to eq(@new_id)
       end
 
       it "has a name" do
-        expect(@new_stamp.name).to eq 'stamp4'
+        expect(@new_stamp.name).to eq(@name)
       end
 
-      it "has a owner_id" do
-        expect(@new_stamp.owner_id).to eq 1
+      it "has an owner" do
+        expect(@new_stamp.owner_id).to eq(@owner)
       end
     end
 
     describe '#find' do
       before do
-        @id = "123"
+        @id = SecureRandom.uuid
         @name = "stamp1"
-        @owner_id = "1"
+        @owner_id = "jeff"
 
         stub_stamp(@id, @name, @owner_id)
 
@@ -64,8 +71,8 @@ RSpec.describe StampClient do
     describe '#all' do
       before do
         @data = [
-          make_stamp_data(1, "stamp1", 1),
-          make_stamp_data(2, "stamp2", 1),
+          make_stamp_data(SecureRandom.uuid, "stamp1", 'jeff'),
+          make_stamp_data(SecureRandom.uuid, "stamp2", 'bob'),
         ]
         stub_request(:get, url+'stamps')
           .to_return(status: 200, body: { data: @data }.to_json, headers: response_headers)
@@ -82,11 +89,12 @@ RSpec.describe StampClient do
       end
     end
 
-    describe '#patch' do
+    describe '#update' do
       before do
-        id = "123"
+        id = SecureRandom.uuid
         name = "stamp1"
-        owner_id = "1"
+        owner_id = "jeff"
+        @newname = 'newname'
 
         stub_stamp(id, name, owner_id)
 
@@ -94,24 +102,23 @@ RSpec.describe StampClient do
         @stamp = rs&.first
 
         stub_request(:patch, stamp_urlid(id))
-          .with( body: { data: { id: '123', type: "stamps", attributes: { name: "newname"}}}.to_json, headers: request_headers)
-          .to_return(status: 200, body: "", headers: response_headers)
+          .with( body: { data: { id: id, type: "stamps", attributes: { name: @newname}}}.to_json, headers: request_headers)
+          .to_return(status: 200, body: { data: make_stamp_data(id, @newname, owner_id) }.to_json, headers: response_headers)
       end
 
       it "can be updated" do
-        @stamp.update(name: 'newname')
-        expect(@stamp.name).to eq 'newname'
+        @stamp.update(name: @newname)
+        expect(WebMock).to have_requested(:patch, stamp_urlid(@stamp.id)).
+          with( body: { data: { id: @stamp.id, type: "stamps", attributes: { name: @newname }}}.to_json, headers: request_headers)
+        expect(@stamp.name).to eq @newname
       end
     end
 
     describe '#find_with_permissions' do
       before do
-        @stamp_id = "123"
+        @stamp_id = SecureRandom.uuid
         @name = "stamp1"
         @owner_id = "dirk@here.com"
-        @permission_id = "1"
-        @permission_type = :spend
-        @permitted = 'zogh'
 
         stub_stamp(@stamp_id, @name, @owner_id)
       end
@@ -131,6 +138,10 @@ RSpec.describe StampClient do
       end
 
       it "returns list of permissions when the stamp has permissions" do
+        @permission_id = "1"
+        @permission_type = :spend
+        @permitted = 'zogh'
+
         response_body = make_stamp_with_permission_data(@stamp_id, @name, @owner_id, @permission_id, @permitted, @permission_type)
 
         stub_request(:get, stamp_urlid(@stamp_id)+"?include=permissions")
@@ -142,7 +153,7 @@ RSpec.describe StampClient do
         expect(permissions).not_to be_nil
         expect(permissions.length).to eq 1
         permission = permissions&.first
-        expect(permission.id).to eq "1"
+        expect(permission.id).to eq @permission_id
         expect(permission.permission_type).to eq @permission_type
         expect(permission.permitted).to eq @permitted
         expect(permission.accessible_id).to eq @stamp_id
@@ -151,7 +162,7 @@ RSpec.describe StampClient do
 
     describe '#set_permissions' do
       before do
-        @stamp_id = "123"
+        @stamp_id = SecureRandom.uuid
         @name = "stamp1"
         @owner_id = "dirk@here.com"
 
@@ -171,11 +182,14 @@ RSpec.describe StampClient do
           response_body = make_stamp_with_permission_data(@stamp_id, @name, @owner_id, @permission_id, @permitted, @permission_type)
 
           stub_request(:post, stamp_urlid(@stamp_id)+"/set_permissions")
-            .with(body: stub_data.to_json,
-              headers: request_headers )
+            .with(body: stub_data.to_json, headers: request_headers)
             .to_return(status: 200, body: response_body.to_json, headers: response_headers)
 
           permissions = stamp.set_permission_to(permissions).permissions
+
+          expect(WebMock).to have_requested(:post, stamp_urlid(@stamp_id)+"/set_permissions")
+            .with(body: stub_data.to_json, headers: request_headers)
+
           expect(permissions).not_to be_nil
           expect(permissions.length).to eq 1
           permission = permissions&.first
@@ -187,26 +201,25 @@ RSpec.describe StampClient do
       end
 
       context 'when the user is not the owner of the stamp' do
-        it 'returns a 403' do
+        it 'raises an error' do
           stamp = StampClient::Stamp.find(@stamp_id).first
           permissions = [{ 'permission-type': @permission_type , permitted: @permitted}]
           stub_data = { data: permissions }
 
           stub_request(:post, stamp_urlid(@stamp_id)+"/set_permissions")
-            .with(body: stub_data.to_json,
-              headers: request_headers )
+            .with(body: stub_data.to_json, headers: request_headers)
             .to_return(status: 403, body: "", headers: response_headers)
 
-          expect{stamp.set_permission_to(permissions)}.to raise_error JsonApiClient::Errors::AccessDenied
+          expect { stamp.set_permission_to(permissions) }.to raise_error JsonApiClient::Errors::AccessDenied
         end
       end
     end
 
     describe '#apply' do
       before do
-        @stamp_id = "123"
+        @stamp_id = SecureRandom.uuid
         @name = "stamp1"
-        @owner_id = "guest"
+        @owner_id = "jeff"
 
         stub_stamp(@stamp_id, @name, @owner_id)
       end
@@ -222,26 +235,28 @@ RSpec.describe StampClient do
           response_body = make_stamp_with_material_data(@stamp_id, @name, @owner_id, material_id, material_uuid)
 
           stub_request(:post, stamp_urlid(@stamp_id)+"/apply")
-            .with(body: stub_data.to_json,
-                 headers: request_headers)
+            .with(body: stub_data.to_json, headers: request_headers)
             .to_return(status: 200, body: response_body.to_json, headers: response_headers)
 
           stamp = stamp.apply_to(materials)
+
+          expect(WebMock).to have_requested(:post, stamp_urlid(@stamp_id)+"/apply")
+            .with(body: stub_data.to_json, headers: request_headers)
+
           expect(stamp).not_to be be_nil
           expect(stamp.materials.first.stamp_id).to eq @stamp_id
         end
       end
 
       context 'when the user is not the owner of the material to be stamped' do
-        it 'does not stamp the material' do
+        it 'raises an error' do
           material_uuid = SecureRandom.uuid
           stamp = StampClient::Stamp.find(@stamp_id).first
           materials = [material_uuid]
           stub_data = { data: { materials: materials }}
 
           stub_request(:post, stamp_urlid(@stamp_id)+"/apply")
-            .with(body: stub_data.to_json,
-                 headers: request_headers)
+            .with(body: stub_data.to_json, headers: request_headers)
             .to_return(status: 403, body: "", headers: response_headers)
 
           expect{stamp.apply_to(materials)}.to raise_error JsonApiClient::Errors::AccessDenied
@@ -251,17 +266,17 @@ RSpec.describe StampClient do
 
     describe '#unapply' do
       before do
-        @stamp_id = "123"
+        @stamp_id = SecureRandom.uuid
         @name = "stamp1"
-        @owner_id = "guest"
+        @owner_id = "jeff"
         @material_id = 1
         @material_uuid = SecureRandom.uuid
 
         stamp_data = make_stamp_with_material_data(@stamp_id, @name, @owner_id, @material_id, @material_uuid)
 
         stub_request(:get, stamp_urlid(@stamp_id))
-         .with(headers: request_headers)
-         .to_return(status: 200, body: stamp_data.to_json, headers: response_headers)
+          .with(headers: request_headers)
+          .to_return(status: 200, body: stamp_data.to_json, headers: response_headers)
       end
 
       context 'when the user is the owner of the material to be unstamped' do
@@ -276,30 +291,31 @@ RSpec.describe StampClient do
           response_body = make_stamp_with_no_material_data(@stamp_id, @name, @owner_id)
 
           stub_request(:post, stamp_urlid(@stamp_id)+"/unapply")
-            .with(body: stub_data.to_json,
-                 headers: request_headers)
+            .with(body: stub_data.to_json, headers: request_headers)
             .to_return(status: 200, body: response_body.to_json, headers: response_headers)
 
           stamp = stamp.unapply_to(materials)
+
+          expect(WebMock).to have_requested(:post, stamp_urlid(@stamp_id)+"/unapply")
+            .with(body: stub_data.to_json, headers: request_headers)
+
           expect(stamp).not_to be be_nil
           expect(stamp.materials).to eq []
         end
       end
 
       context 'when the user is not the owner of the material to be unstamped' do
-        it 'does not remove the stamp on the material' do
+        it 'raises an error' do
           stamp = StampClient::Stamp.find(@stamp_id).first
           material_uuid = stamp.materials.first["material-uuid"]
           materials = [material_uuid]
           stub_data = { data: { materials: materials } }
 
-
           stub_request(:post, stamp_urlid(@stamp_id)+"/unapply")
-            .with(body: stub_data.to_json,
-                 headers: request_headers)
+            .with(body: stub_data.to_json, headers: request_headers)
             .to_return(status: 403, body: "", headers: response_headers)
 
-          expect{stamp.unapply_to(materials)}.to raise_error JsonApiClient::Errors::AccessDenied
+          expect { stamp.unapply_to(materials) }.to raise_error JsonApiClient::Errors::AccessDenied
         end
       end
 
@@ -309,7 +325,7 @@ RSpec.describe StampClient do
   describe StampClient::Permission do
     describe '#create' do
       before do
-        @id = '123'
+        @id = SecureRandom.uuid
         stamp_name = 'stamp123'
         stamp_owner_id = 'dirk@here.com'
         stub_stamp(@id, stamp_name, stamp_owner_id)
@@ -319,23 +335,27 @@ RSpec.describe StampClient do
 
         @permission_type = :spend
         @permitted = 'permitted_person'
+        @postdata = { type: "permissions", attributes: { "permission-type": @permission_type, permitted: @permitted, "accessible-id": @id }}
       end
 
       context 'when the user is the owner of the stamp' do
         before do
-          response_body = make_permission_data("456", @permission_type, @permitted, @id)
+          @permission_id = "4"
+          response_body = make_permission_data(@permission_id, @permission_type, @permitted, @id)
 
           stub_request(:post, url+"permissions")
-            .with(body: { data: { type: "permissions", attributes: { "permission-type": @permission_type, permitted: @permitted, "accessible-id": @id}}}.to_json,
-              headers: request_headers)
+            .with(body: { data: @postdata }.to_json, headers: request_headers)
             .to_return(status: 200, body: response_body.to_json, headers: response_headers)
         end
 
         it 'creates a permission on the stamp' do
           perm = StampClient::Permission.create('permission-type': @permission_type, permitted: @permitted, 'accessible-id': @id)
 
+          expect(WebMock).to have_requested(:post, url+"permissions")
+            .with(body: { data: @postdata }.to_json, headers: request_headers)
+
           expect(perm).not_to be_nil
-          expect(perm.id).to eq "456"
+          expect(perm.id).to eq @permission_id
           expect(perm.permission_type).to eq @permission_type
           expect(perm.permitted).to eq @permitted
           expect(perm.accessible_id).to eq @id
@@ -345,12 +365,11 @@ RSpec.describe StampClient do
       context 'when the user is not the owner of the stamp' do
         before do
           stub_request(:post, url+"permissions")
-            .with(body: { data: { type: "permissions", attributes: { "permission-type": @permission_type, permitted: @permitted, "accessible-id": @id}}}.to_json,
-              headers: request_headers)
+            .with(body: { data: @postdata }.to_json, headers: request_headers)
             .to_return(status: 403, body: "", headers: response_headers)
         end
 
-        it 'it throws AccessDenied exception ' do
+        it 'throws AccessDenied exception' do
           expect { StampClient::Permission.create('permission-type': @permission_type, permitted: @permitted, 'accessible-id': @id) }.to raise_error JsonApiClient::Errors::AccessDenied
         end
       end
@@ -363,7 +382,7 @@ RSpec.describe StampClient do
           @id = "1"
           permission_type = :spend
           permitted = 'dirk'
-          stamp_id = '123'
+          stamp_id = SecureRandom.uuid
           stub_permission(@id, permission_type, permitted, stamp_id)
 
           stub_request(:delete, url+"permissions").
@@ -371,28 +390,29 @@ RSpec.describe StampClient do
             to_return(status: 204, body: "", headers: response_headers)
         end
 
-        it 'the permission is destroyed and removed from the stamp' do
-          p = StampClient::Permission.find(@id).first
-          expect(p.destroy).to eq true
+        it 'deletes the permission' do
+          perm = StampClient::Permission.find(@id).first
+          expect(perm.destroy).to eq true
+          expect(WebMock).to have_requested(:delete, url+"permissions")
         end
       end
 
       context 'when the user is not the owner of the stamp' do
         before do
-          @id = "1"
+          @perm_id = "1"
           permission_type = :spend
           permitted = 'dirk'
-          stamp_id = 'x123'
-          stub_permission(@id, permission_type, permitted, stamp_id)
+          stamp_id = SecureRandom.uuid
+          stub_permission(@perm_id, permission_type, permitted, stamp_id)
 
           stub_request(:delete, url+"permissions").
             with(headers: response_headers).
             to_return(:status => 403, :body => "", :headers => {})
         end
 
-        it 'the permission is destroyed and removed from the stamp' do
-          p = StampClient::Permission.find(@id).first
-          expect { p.destroy }.to raise_error JsonApiClient::Errors::AccessDenied
+        it 'raises an error' do
+          perm = StampClient::Permission.find(@perm_id).first
+          expect { perm.destroy }.to raise_error JsonApiClient::Errors::AccessDenied
         end
       end
 
@@ -400,26 +420,43 @@ RSpec.describe StampClient do
 
     describe '#check_catch' do
       before do
-        @permission_type = 'spend'
+        @permission_type = :spend
         @names = ['dirk@here.com']
-        @material_uuids = ['123']
+        @material_uuids = [ SecureRandom.uuid, SecureRandom.uuid, SecureRandom.uuid ]
       end
 
-      it 'returns true when check_catch returns no unpermitted material_uuids' do
-        stub_permission_check_200(@permission_type, @names, @material_uuids)
-        data = make_permission_check_data(@permission_type, @names, @material_uuids)
+      context 'when there are no unpermitted material uuids' do
+        before do
+          stub_permission_check_200(@permission_type, @names, @material_uuids)
+          @data = make_permission_check_data(@permission_type, @names, @material_uuids)
+          @result = StampClient::Permission.check_catch(@data)
+        end
 
-        rs = StampClient::Permission.check_catch(data)
-        expect(rs).to eq true
+        it 'sends the check request' do
+          expect(WebMock).to have_requested(:post, url+"permissions/check")
+            .with(body: { data: @data }.to_json, headers: request_headers)
+        end
+
+        it 'returns true' do
+          expect(@result).to be_truthy
+        end
       end
 
-      it 'returns false when check_catch returns a list of unpermitted material_uuids' do
-        stub_permission_check_403(@permission_type, @names, @material_uuids)
-        data = make_permission_check_data(@permission_type, @names, @material_uuids)
+      context 'when there are unpermitted material uuids' do
+        before do
+          @unpermitted_uuid = @material_uuids[0,2]
+          stub_permission_check_403(@permission_type, @names, @material_uuids, @unpermitted_uuids)
+          data = make_permission_check_data(@permission_type, @names, @material_uuids)
+          @result = StampClient::Permission.check_catch(data)
+        end
 
-        rs = StampClient::Permission.check_catch(data)
-        expect(rs).to eq false
-        expect(StampClient::Permission.unpermitted_uuids).to eq @material_uuids
+        it 'returns false' do
+          expect(@result).to be_falsey
+        end
+
+        it 'contains the unpermitted uuids' do
+          expect(StampClient::Permission.unpermitted_uuids).to eq(@unpermitted_uuids)
+        end
       end
     end
 
@@ -583,7 +620,7 @@ RSpec.describe StampClient do
         type: "permissions",
         attributes:
         {
-         "permission-type": permission_type,
+          "permission-type": permission_type,
           permitted: permitted,
           "accessible-id": accessible_id
         }
@@ -596,25 +633,24 @@ RSpec.describe StampClient do
     data = make_permission_check_data(permission_type, names, material_uuids)
     stub_data = {data: data}
     stub_request(:post, url+"permissions/check").
-    with(
-        body: stub_data.to_json,
-        headers: request_headers
-        )
-    .to_return(status: 200, body: '', headers: response_headers)
+      with(body: stub_data.to_json, headers: request_headers).
+      to_return(status: 200, body: '', headers: response_headers)
   end
 
-  def stub_permission_check_403(permission_type, names, material_uuids)
+  def stub_permission_check_403(permission_type, names, material_uuids, unpermitted_uuids)
     data = make_permission_check_data(permission_type, names, material_uuids)
     stub_data = {data: data}
 
-    response_body = {errors:[{status:"403",title:"Permission failed",detail:"The specified permission was not present for some materials.",material_uuids: material_uuids }]}
+    response_body = { errors: [{
+        status: "403",
+        title: "Permission failed",
+        detail: "The specified permission was not present for some materials.",
+        material_uuids: unpermitted_uuids
+    }]}
 
     stub_request(:post, url+"permissions/check").
-    with(
-        body: stub_data.to_json,
-        headers: request_headers
-        )
-    .to_return(status: 403, body: response_body.to_json, headers: response_headers)
+      with(body: stub_data.to_json, headers: request_headers).
+      to_return(status: 403, body: response_body.to_json, headers: response_headers)
   end
 
   def make_permission_check_data(permission_type, names, material_uuids)
