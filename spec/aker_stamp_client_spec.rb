@@ -176,8 +176,8 @@ RSpec.describe StampClient do
       context 'when the user is the owner of the stamp' do
         it 'sets the permissions on the stamp' do
           stamp = StampClient::Stamp.find(@stamp_id).first
-          permissions = [{ 'permission-type': @permission_type , permitted: @permitted}]
-          stub_data = { data: permissions }
+          permissions = [{ permission_type: @permission_type, permitted: @permitted}]
+          stub_data = { data: [ 'permission-type': @permission_type, permitted: @permitted] }
 
           response_body = make_stamp_with_permission_data(@stamp_id, @name, @owner_id, @permission_id, @permitted, @permission_type)
 
@@ -185,7 +185,7 @@ RSpec.describe StampClient do
             .with(body: stub_data.to_json, headers: request_headers)
             .to_return(status: 200, body: response_body.to_json, headers: response_headers)
 
-          permissions = stamp.set_permission_to(permissions).permissions
+          permissions = stamp.set_permissions_to(permissions).permissions
 
           expect(WebMock).to have_requested(:post, stamp_urlid(@stamp_id)+"/set_permissions")
             .with(body: stub_data.to_json, headers: request_headers)
@@ -203,14 +203,14 @@ RSpec.describe StampClient do
       context 'when the user is not the owner of the stamp' do
         it 'raises an error' do
           stamp = StampClient::Stamp.find(@stamp_id).first
-          permissions = [{ 'permission-type': @permission_type , permitted: @permitted}]
-          stub_data = { data: permissions }
+          permissions = [{ permission_type: @permission_type , permitted: @permitted}]
+          stub_data = { data: [ 'permission-type': @permission_type, permitted: @permitted] }
 
           stub_request(:post, stamp_urlid(@stamp_id)+"/set_permissions")
             .with(body: stub_data.to_json, headers: request_headers)
             .to_return(status: 403, body: "", headers: response_headers)
 
-          expect { stamp.set_permission_to(permissions) }.to raise_error JsonApiClient::Errors::AccessDenied
+          expect { stamp.set_permissions_to(permissions) }.to raise_error JsonApiClient::Errors::AccessDenied
         end
       end
     end
@@ -282,7 +282,7 @@ RSpec.describe StampClient do
       context 'when the user is the owner of the material to be unstamped' do
         it 'removes the stamp on the material' do
           stamp = StampClient::Stamp.find(@stamp_id).first
-          material_uuid = stamp.materials.first["material-uuid"]
+          material_uuid = stamp.materials.first.material_uuid
           materials = [material_uuid]
           stub_data = { data: { materials: materials } }
 
@@ -349,7 +349,7 @@ RSpec.describe StampClient do
         end
 
         it 'creates a permission on the stamp' do
-          perm = StampClient::Permission.create('permission-type': @permission_type, permitted: @permitted, 'accessible-id': @id)
+          perm = StampClient::Permission.create(permission_type: @permission_type, permitted: @permitted, accessible_id: @id)
 
           expect(WebMock).to have_requested(:post, url+"permissions")
             .with(body: { data: @postdata }.to_json, headers: request_headers)
@@ -370,7 +370,7 @@ RSpec.describe StampClient do
         end
 
         it 'throws AccessDenied exception' do
-          expect { StampClient::Permission.create('permission-type': @permission_type, permitted: @permitted, 'accessible-id': @id) }.to raise_error JsonApiClient::Errors::AccessDenied
+          expect { StampClient::Permission.create(permission_type: @permission_type, permitted: @permitted, accessible_id: @id) }.to raise_error JsonApiClient::Errors::AccessDenied
         end
       end
     end
@@ -407,7 +407,7 @@ RSpec.describe StampClient do
 
           stub_request(:delete, url+"permissions").
             with(headers: response_headers).
-            to_return(:status => 403, :body => "", :headers => {})
+            to_return(status: 403, body: "", headers: {})
         end
 
         it 'raises an error' do
@@ -608,8 +608,8 @@ RSpec.describe StampClient do
     permission_data = make_permission_data(id, permission_type, permitted, accessible_id)
 
     stub_request(:get, permission_urlid(id))
-         .with(headers: request_headers)
-         .to_return(status: 200, body: { data: permission_data }.to_json, headers: response_headers)
+        .with(headers: request_headers)
+        .to_return(status: 200, body: { data: permission_data }.to_json, headers: response_headers)
   end
 
   def make_permission_data(id, permission_type, permitted, accessible_id)
