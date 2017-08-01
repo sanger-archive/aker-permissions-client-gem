@@ -1,7 +1,6 @@
 require "aker_stamp_client/version"
 require "json_api_client"
 require "pry"
-require 'active_support/inflector'
 
 module StampClient
   class Base < JsonApiClient::Resource
