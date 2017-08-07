@@ -13,6 +13,7 @@ module StampClient
     custom_endpoint :set_permissions, on: :member, request_method: :post
     custom_endpoint :apply, on: :member, request_method: :post
     custom_endpoint :unapply, on: :member, request_method: :post
+    custom_endpoint :deactivate, on: :member, request_method: :post
 
     def update(attrs)
       self.update_attributes(attrs)
@@ -40,6 +41,7 @@ module StampClient
     def unapply_to(materials)
       unapply(data: { materials: materials }).first
     end
+
   end
 
   class Permission < Base
