@@ -66,5 +66,7 @@ module StampClient
   class Material < Base
   end
 
-end
+  class Deputy < Base
+  end
 
+end
