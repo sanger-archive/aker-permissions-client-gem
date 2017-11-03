@@ -1,4 +1,5 @@
 # Aker - Stamp Client
+[![Build Status](https://travis-ci.org/sanger/aker-stamp-client.svg?branch=master)](https://travis-ci.org/sanger/aker-stamp-client)
 
 A gem which enables communication with the stamp service.
 
