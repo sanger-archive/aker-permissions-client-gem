@@ -4,7 +4,7 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require 'aker_stamp_client/version'
 
 Gem::Specification.new do |spec|
-  spec.name          = "aker_stamp_client"
+  spec.name          = "aker_permissions_client"
   spec.version       = AkerStampClient::VERSION
   spec.authors       = ["Harriet Craven"]
   spec.email         = ["hc6@sanger.ac.uk"]
