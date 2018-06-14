@@ -1,5 +1,7 @@
-# Aker - Stamp Client
+# Aker - Permission client gem
 [![Build Status](https://travis-ci.org/sanger/aker-stamp-client.svg?branch=master)](https://travis-ci.org/sanger/aker-stamp-client)
+[![Maintainability](https://api.codeclimate.com/v1/badges/f91c2df98244a49594da/maintainability)](https://codeclimate.com/github/sanger/aker-permissions-client-gem/maintainability)
+[![Test Coverage](https://api.codeclimate.com/v1/badges/f91c2df98244a49594da/test_coverage)](https://codeclimate.com/github/sanger/aker-permissions-client-gem/test_coverage)
 
 A gem which enables communication with the stamp service.
 
